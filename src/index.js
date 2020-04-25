@@ -6,7 +6,7 @@ const morgan = require("morgan");
 const socketIo = require("socket.io");
 
 
-const THRESHOLD = 400;
+const THRESHOLD = 200;
 /**
  * words are object of the form:
  * {
@@ -18,8 +18,8 @@ const THRESHOLD = 400;
  *    }
  *  };
  */
-const motionData = [];
-let firstTimestamp = 0;
+const motionData = {
+};
 
 const port = process.env.PORT || 4001;
 
@@ -49,35 +49,59 @@ app.use(morgan("dev"));
 // create socket server
 const io = socketIo(server);
 
-io.on("connection", socket => {
+io.on("connection", (socket) => {
   console.log("New client joined: ", socket.id);
-  // join room
-  socket.join("motion_room");
   // emit the initial data
-  socket.emit("motion_data", motionData);
+  socket.emit("motion_devices", Object.keys(motionData));
 
   // report on disconnect
   socket.on("disconnect", () => console.log("Client disconnected"));
 
-  socket.on("new_motion_data", data => {
-    if (motionData.length === 0) {
-      firstTimestamp = data.timeStamp;
+  socket.on("new_device", data => {
+    console.log('register new device: ', data)
+
+    if (data.name.length > 0) {
+      motionData[data.name] = [];
     }
-    // remove first element if too many elements are present
-    if (motionData.length >= THRESHOLD) {
-      motionData.shift();
-    }
-    
-    data.timeStamp = data.timeStamp - firstTimestamp;
-    // add the new motionData
-    motionData.push(data);
-    // and emit a 'circle_data' event to all the sockets within the room
-    io.in("motion_room").emit("motion_data", motionData);
+    socket.broadcast.emit("motion_devices", Object.keys(motionData));
   });
 
-  socket.on("clear_motion_data", _circle => {
-    motionData.length = 0;
-    io.in("motion_room").emit("motion_data", motionData);
+  socket.on("get_devices", () => {
+    socket.emit("motion_devices", Object.keys(motionData));
+  });
+
+  socket.on("display_device", data => {
+    if (data.oldDevice) {
+      // leave the previous device room
+      socket.leave(data.oldDevice);
+    }
+    // join the new sensor device room
+    socket.join(data.name);
+  });
+
+  socket.on("new_motion_data", data => {
+    // return if the device is not known
+    if (!motionData[data.name]) {
+      return;
+    }
+    // remove first element if too many elements are present
+    if (motionData[data.name].length >= THRESHOLD) {
+      motionData[data.name].shift();
+    }
+    // add the new motionData
+    motionData[data.name].push(data);
+
+    // and emit a 'motion_data' event to all the sockets within the room
+    io.in(data.name).emit("motion_data", motionData[data.name]);
+  });
+
+  socket.on("clear_motion_data", data => {
+    if (!motionData[data.name]) {
+      return;
+    }
+    motionData[data.name] = [];
+    // notify all the sockets within the room that data changed
+    io.in(data.name).emit("motion_data", motionData);
   });
 });
 
