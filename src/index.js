@@ -8,18 +8,20 @@ const socketIo = require("socket.io");
 
 const THRESHOLD = 200;
 /**
- * words are object of the form:
+ * a motion data frame is an object of the form:
  * {
- *    timeStamp: e.timeStamp,
+ *    name: "TJVSV",
+ *    timeStamp: 1023,
  *    acceleration: {
  *      x: 0,
  *      y: 0,
  *      z: -9.81
  *    }
  *  };
+ * the timeStamp is in milliseconds
  */
-let motionData = {
-};
+let motionData = {};
+const socketIdDeviceName = {};
 
 const port = process.env.PORT || 4001;
 
@@ -55,23 +57,24 @@ io.on("connection", (socket) => {
   socket.emit("motion_devices", Object.keys(motionData));
 
   // report on disconnect
-  socket.on("disconnect", () => console.log("Client disconnected"));
+  socket.on("disconnect", () => {
+    console.log("Client disconnected");
+    delete motionData[socketIdDeviceName[socket.id]];
+    delete socketIdDeviceName[socket.id];
+    socket.broadcast.emit("motion_devices", Object.keys(motionData));
+  });
 
   socket.on("new_device", data => {
     console.log('register new device: ', data)
 
     if (data.name.length > 0) {
       motionData[data.name] = [];
+      socketIdDeviceName[socket.id] = data.name;
     }
     socket.broadcast.emit("motion_devices", Object.keys(motionData));
   });
 
   socket.on("get_devices", () => {
-    socket.emit("motion_devices", Object.keys(motionData));
-  });
-
-  socket.on("clear_devices", () => {
-    motionData = {};
     socket.emit("motion_devices", Object.keys(motionData));
   });
 
