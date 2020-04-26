@@ -18,7 +18,7 @@ const THRESHOLD = 200;
  *    }
  *  };
  */
-const motionData = {
+let motionData = {
 };
 
 const port = process.env.PORT || 4001;
@@ -67,6 +67,11 @@ io.on("connection", (socket) => {
   });
 
   socket.on("get_devices", () => {
+    socket.emit("motion_devices", Object.keys(motionData));
+  });
+
+  socket.on("clear_devices", () => {
+    motionData = {};
     socket.emit("motion_devices", Object.keys(motionData));
   });
 
