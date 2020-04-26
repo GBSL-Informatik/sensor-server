@@ -10,7 +10,7 @@ const THRESHOLD = 200;
 /**
  * a motion data frame is an object of the form:
  * {
- *    name: "TJVSV",
+ *    deviceId: "TJVSV",
  *    timeStamp: 1023,
  *    acceleration: {
  *      x: 0,
@@ -20,8 +20,11 @@ const THRESHOLD = 200;
  *  };
  * the timeStamp is in milliseconds
  */
-let motionData = {};
-const socketIdDeviceName = {};
+const motionData = {};
+/**
+ * a map to save socketId -> deviceId conversions
+ */
+const socketId_deviceId = {};
 
 const port = process.env.PORT || 4001;
 
@@ -58,18 +61,18 @@ io.on("connection", (socket) => {
 
   // report on disconnect
   socket.on("disconnect", () => {
-    console.log("Client disconnected");
-    delete motionData[socketIdDeviceName[socket.id]];
-    delete socketIdDeviceName[socket.id];
+    console.log("Client disconnected: ", socket.id, socketId_deviceId[socket.id]);
+    delete motionData[socketId_deviceId[socket.id]];
+    delete socketId_deviceId[socket.id];
     socket.broadcast.emit("motion_devices", Object.keys(motionData));
   });
 
   socket.on("new_device", data => {
-    console.log('register new device: ', data)
+    console.log("register new device: ", data)
 
-    if (data.name.length > 0) {
-      motionData[data.name] = [];
-      socketIdDeviceName[socket.id] = data.name;
+    if (data.deviceId.length > 0) {
+      motionData[data.deviceId] = [];
+      socketId_deviceId[socket.id] = data.deviceId;
     }
     socket.broadcast.emit("motion_devices", Object.keys(motionData));
   });
@@ -79,37 +82,37 @@ io.on("connection", (socket) => {
   });
 
   socket.on("display_device", data => {
-    if (data.oldDevice) {
+    if (data.oldDeviceId) {
       // leave the previous device room
-      socket.leave(data.oldDevice);
+      socket.leave(data.oldDeviceId);
     }
     // join the new sensor device room
-    socket.join(data.name);
+    socket.join(data.deviceId);
   });
 
   socket.on("new_motion_data", data => {
     // return if the device is not known
-    if (!motionData[data.name]) {
+    if (!motionData[data.deviceId]) {
       return;
     }
     // remove first element if too many elements are present
-    if (motionData[data.name].length >= THRESHOLD) {
-      motionData[data.name].shift();
+    if (motionData[data.deviceId].length >= THRESHOLD) {
+      motionData[data.deviceId].shift();
     }
     // add the new motionData
-    motionData[data.name].push(data);
+    motionData[data.deviceId].push(data);
 
-    // and emit a 'motion_data' event to all the sockets within the room
-    io.in(data.name).emit("motion_data", motionData[data.name]);
+    // and emit a "motion_data" event to all the sockets within the room
+    io.in(data.deviceId).emit("motion_data", motionData[data.deviceId]);
   });
 
   socket.on("clear_motion_data", data => {
-    if (!motionData[data.name]) {
+    if (!motionData[data.deviceId]) {
       return;
     }
-    motionData[data.name] = [];
+    motionData[data.deviceId] = [];
     // notify all the sockets within the room that data changed
-    io.in(data.name).emit("motion_data", motionData);
+    io.in(data.deviceId).emit("motion_data", motionData);
   });
 });
 
