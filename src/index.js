@@ -54,6 +54,13 @@ app.use(morgan("dev"));
 // create socket server
 const io = socketIo(server);
 
+/**
+ * @return [Array<string>] all currently active deviceIds
+ */
+function deviceIds() {
+  return Object.keys(motionData);
+}
+
 io.on("connection", (socket) => {
   console.log("New client joined: ", socket.id);
   // emit the initial data
@@ -64,7 +71,7 @@ io.on("connection", (socket) => {
     console.log("Client disconnected: ", socket.id, socketId_deviceId[socket.id]);
     delete motionData[socketId_deviceId[socket.id]];
     delete socketId_deviceId[socket.id];
-    socket.broadcast.emit("motion_devices", Object.keys(motionData));
+    io.emit("motion_devices", Object.keys(motionData));
   });
 
   socket.on("new_device", data => {
@@ -74,18 +81,15 @@ io.on("connection", (socket) => {
       motionData[data.deviceId] = [];
       socketId_deviceId[socket.id] = data.deviceId;
     }
-    socket.broadcast.emit("motion_devices", Object.keys(motionData));
+    io.emit("motion_devices", deviceIds());
   });
 
   socket.on("get_devices", () => {
-    socket.emit("motion_devices", Object.keys(motionData));
+    socket.emit("motion_devices", deviceIds());
   });
 
   socket.on("display_device", data => {
-    if (data.oldDeviceId) {
-      // leave the previous device room
-      socket.leave(data.oldDeviceId);
-    }
+    socket.leave(data.oldDeviceId);
     // join the new sensor device room
     socket.join(data.deviceId);
   });
@@ -112,7 +116,7 @@ io.on("connection", (socket) => {
     }
     motionData[data.deviceId] = [];
     // notify all the sockets within the room that data changed
-    io.in(data.deviceId).emit("motion_data", motionData);
+    io.in(data.deviceId).emit("motion_data", motionData[data.deviceId]);
   });
 });
 
